@@ -244,6 +244,15 @@ class ScoreRequest(BaseModel):
 class ScoredContractor(BaseModel):
     id: str
     name: str
+    vertical: str
+    years_in_business: int
+    rating: float
+    review_count: int
+    service_area: str
+    pricing_band: str
+    speed_weeks: int
+    licenses: List[str]
+    flags: List[str]
     score: float
     reasoning: Optional[str] = None
 
@@ -275,8 +284,10 @@ async def score_contractors_with_openai(request: ScoreRequest):
                 "years_in_business": contractor["years_in_business"],
                 "rating": contractor["rating"],
                 "review_count": contractor["review_count"],
+                "service_area": contractor["service_area"],
                 "pricing_band": contractor["pricing_band"],
                 "speed_weeks": contractor.get("speed_weeks", 4),
+                "licenses": contractor.get("licenses", []),
                 "flags": contractor.get("flags", [])
             })
         
@@ -326,17 +337,28 @@ RULES:
 3. Consider user notes for qualitative adjustments
 4. Provide brief reasoning for the adjustment
 
-Format as JSON:
+Format as JSON with ALL contractor details:
 {{
   "top_contractors": [
     {{
       "id": "contractor_id",
-      "name": "contractor_name",
+      "name": "contractor_name", 
+      "vertical": "contractor_vertical",
+      "years_in_business": years_as_number,
+      "rating": rating_as_number,
+      "review_count": review_count_as_number,
+      "service_area": "service_area",
+      "pricing_band": "pricing_band",
+      "speed_weeks": speed_weeks_as_number,
+      "licenses": ["license1", "license2"],
+      "flags": ["flag1", "flag2"],
       "score": final_score_within_plus_minus_5,
       "reasoning": "Brief reason for ±X adjustment from base score"
     }}
   ]
 }}
+
+IMPORTANT: Include ALL contractor details exactly as provided, don't modify the data.
 """
 
         # Step 3: Call OpenAI API for ±5 adjustment
@@ -355,13 +377,20 @@ Format as JSON:
             parsed_response = json.loads(gpt_response)
             top_contractors = []
             
-            # Create lookup for base scores
+            # Create lookup for base scores and full contractor details
             base_score_lookup = {c["id"]: c["base_score"] for c in top_candidates}
+            contractor_details_lookup = {c["id"]: c for c in top_candidates}
             
             for contractor_data in parsed_response.get("top_contractors", []):
                 contractor_id = contractor_data.get("id", "")
                 suggested_score = float(contractor_data.get("score", 0))
                 base_score = base_score_lookup.get(contractor_id, 0)
+                
+                # Get full contractor details
+                full_contractor = contractor_details_lookup.get(contractor_id)
+                if not full_contractor:
+                    logger.warning(f"Contractor {contractor_id} not found in candidates")
+                    continue
                 
                 # Enforce ±5 constraint
                 min_allowed = base_score - 5
@@ -374,7 +403,16 @@ Format as JSON:
                 
                 top_contractors.append(ScoredContractor(
                     id=contractor_id,
-                    name=contractor_data.get("name", ""),
+                    name=full_contractor["name"],
+                    vertical=full_contractor["vertical"],
+                    years_in_business=full_contractor["years_in_business"],
+                    rating=full_contractor["rating"],
+                    review_count=full_contractor["review_count"],
+                    service_area=full_contractor["service_area"],
+                    pricing_band=full_contractor["pricing_band"],
+                    speed_weeks=full_contractor["speed_weeks"],
+                    licenses=full_contractor["licenses"],
+                    flags=full_contractor["flags"],
                     score=round(final_score, 1),
                     reasoning=contractor_data.get("reasoning", "")
                 ))
@@ -398,6 +436,15 @@ Format as JSON:
                 fallback_contractors.append(ScoredContractor(
                     id=contractor["id"],
                     name=contractor["name"],
+                    vertical=contractor["vertical"],
+                    years_in_business=contractor["years_in_business"],
+                    rating=contractor["rating"],
+                    review_count=contractor["review_count"],
+                    service_area=contractor["service_area"],
+                    pricing_band=contractor["pricing_band"],
+                    speed_weeks=contractor["speed_weeks"],
+                    licenses=contractor["licenses"],
+                    flags=contractor["flags"],
                     score=contractor["base_score"],
                     reasoning="Base score (GPT adjustment failed)"
                 ))

@@ -19,6 +19,14 @@ interface ProjectWeights {
   speed: number
 }
 
+interface RawWeights {
+  experience: number
+  reviews: number
+  rating: number
+  price: number
+  speed: number
+}
+
 interface Contractor {
   name: string
   title: string
@@ -42,6 +50,15 @@ interface Contractor {
 interface ApiContractor {
   id: string
   name: string
+  vertical: string
+  years_in_business: number
+  rating: number
+  review_count: number
+  service_area: string
+  pricing_band: string
+  speed_weeks: number
+  licenses: string[]
+  flags: string[]
   score: number
   reasoning?: string
 }
@@ -118,13 +135,70 @@ export default function HomeRepairApp() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [apiContractors, setApiContractors] = useState<ApiContractor[]>([])
   const [error, setError] = useState<string>("")
-  const [weights, setWeights] = useState<ProjectWeights>({
-    experience: 0.4,
-    reviews: 0.25,
-    rating: 0.2,
-    price: 0.1,
-    speed: 0.05,
+  // Raw weights (0-100 scale, user-friendly)
+  const [rawWeights, setRawWeights] = useState<RawWeights>({
+    experience: 40,
+    reviews: 25,
+    rating: 20,
+    price: 10,
+    speed: 5,
   })
+
+  // Normalized weights for API (0-1 scale)
+  const getNormalizedWeights = (): ProjectWeights => {
+    const total = Object.values(rawWeights).reduce((sum, val) => sum + val, 0)
+    if (total === 0) {
+      // If all are 0, distribute evenly
+      return {
+        experience: 0.2,
+        reviews: 0.2,
+        rating: 0.2,
+        price: 0.2,
+        speed: 0.2,
+      }
+    }
+    return {
+      experience: rawWeights.experience / total,
+      reviews: rawWeights.reviews / total,
+      rating: rawWeights.rating / total,
+      price: rawWeights.price / total,
+      speed: rawWeights.speed / total,
+    }
+  }
+
+  // Get normalized percentages for display (ensures total = 100%)
+  const getNormalizedPercentages = () => {
+    const normalized = getNormalizedWeights()
+    const keys: (keyof ProjectWeights)[] = ['experience', 'reviews', 'rating', 'price', 'speed']
+    
+    // Calculate exact percentages
+    const exactPercentages = keys.map(key => normalized[key] * 100)
+    
+    // Floor all values and calculate remainders
+    const flooredPercentages = exactPercentages.map(Math.floor)
+    const remainders = exactPercentages.map((exact, i) => exact - flooredPercentages[i])
+    
+    // Calculate how many we need to round up to reach 100%
+    const currentTotal = flooredPercentages.reduce((sum, val) => sum + val, 0)
+    const roundUpCount = 100 - currentTotal
+    
+    // Sort by remainder (largest first) and round up the top ones
+    const indexedRemainders = remainders.map((remainder, index) => ({ remainder, index }))
+    indexedRemainders.sort((a, b) => b.remainder - a.remainder)
+    
+    const finalPercentages = [...flooredPercentages]
+    for (let i = 0; i < roundUpCount; i++) {
+      finalPercentages[indexedRemainders[i].index] += 1
+    }
+    
+    return {
+      experience: finalPercentages[0],
+      reviews: finalPercentages[1],
+      rating: finalPercentages[2],
+      price: finalPercentages[3],
+      speed: finalPercentages[4],
+    }
+  }
 
   const handleSearch = async () => {
     if (city && projectType) {
@@ -132,7 +206,7 @@ export default function HomeRepairApp() {
       setError("")
       
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/score`, {
+        const response = await fetch("http://localhost:8000/score", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -141,7 +215,7 @@ export default function HomeRepairApp() {
             city,
             project_type: projectType,
             notes,
-            weights,
+            weights: getNormalizedWeights(),
           }),
         })
 
@@ -176,49 +250,43 @@ export default function HomeRepairApp() {
 
   // Map API contractor data to display format
   const getContractorDetails = (apiContractor: ApiContractor): Contractor => {
-    // Map the API contractor to the hardcoded data based on name or ID
-    const contractorMap: { [key: string]: Contractor } = {
-      "c1": mockContractors[0], // NorthPeak Roofing -> Sarah Johnson
-      "c2": mockContractors[1], // Beehive Home Repair -> James Mark  
-      "c3": mockContractors[2], // Wasatch Elite Exteriors -> Vicks Johnny
-      "c4": mockContractors[1], // Granite Peak Roofing -> James Mark
-      "c5": mockContractors[0], // QuickFix Pros -> Sarah Johnson
-    }
-
-    const baseContractor = contractorMap[apiContractor.id] || mockContractors[0]
-    
+    // Use real API data and supplement with display-friendly info
     return {
-      ...baseContractor,
       name: apiContractor.name,
+      title: "Contractor", // Generic title
+      vertical: apiContractor.vertical,
+      years_in_business: apiContractor.years_in_business,
+      rating: apiContractor.rating,
+      review_count: apiContractor.review_count,
+      service_area: apiContractor.service_area,
+      pricing_band: apiContractor.pricing_band,
+      licenses: apiContractor.licenses,
+      flags: apiContractor.flags,
       trustScore: Math.round(apiContractor.score), // Use API score as trust score
-      aiSummary: apiContractor.reasoning || baseContractor.aiSummary,
+      distance: "3.5 Miles Away", // Default distance for display
+      services: ["Repair Services", "Installation", "Consultation", "Emergency Repairs"], // Default services
+      aiSummary: apiContractor.reasoning || "This contractor has been selected based on your preferences and requirements.",
+      description: `Experienced ${apiContractor.vertical} contractor with ${apiContractor.years_in_business} years in business. ${apiContractor.rating}/5 rating based on ${apiContractor.review_count} reviews.`,
+      profileImage: undefined, // No profile image from API
     }
   }
 
-  const updateWeights = (key: keyof ProjectWeights, newValue: number) => {
-    const otherKeys = Object.keys(weights).filter((k) => k !== key) as (keyof ProjectWeights)[]
-    const currentTotal = Object.values(weights).reduce((sum, val) => sum + val, 0)
-    const otherTotal = currentTotal - weights[key]
+  const updateRawWeight = (key: keyof RawWeights, newValue: number) => {
+    setRawWeights({
+      ...rawWeights,
+      [key]: newValue,
+    })
+  }
 
-    // If other sliders total is 0, distribute remaining evenly
-    if (otherTotal === 0) {
-      const remaining = 1 - newValue
-      const perSlider = remaining / otherKeys.length
-      const newWeights = { ...weights, [key]: newValue }
-      otherKeys.forEach((otherKey) => {
-        newWeights[otherKey] = perSlider
-      })
-      setWeights(newWeights)
-    } else {
-      // Proportionally adjust other sliders
-      const remaining = 1 - newValue
-      const scaleFactor = remaining / otherTotal
-      const newWeights = { ...weights, [key]: newValue }
-      otherKeys.forEach((otherKey) => {
-        newWeights[otherKey] = weights[otherKey] * scaleFactor
-      })
-      setWeights(newWeights)
+  // Preset weight configurations
+  const applyPreset = (presetName: string) => {
+    const presets = {
+      balanced: { experience: 20, reviews: 20, rating: 20, price: 20, speed: 20 },
+      quality_focused: { experience: 35, reviews: 25, rating: 25, price: 10, speed: 5 },
+      budget_focused: { experience: 15, reviews: 15, rating: 15, price: 40, speed: 15 },
+      speed_focused: { experience: 20, reviews: 15, rating: 15, price: 15, speed: 35 },
     }
+    setRawWeights(presets[presetName as keyof typeof presets] || presets.balanced)
   }
 
   const Header = () => (
@@ -435,25 +503,67 @@ export default function HomeRepairApp() {
                 <div className="flex justify-between items-center">
                   <Label className="text-base font-semibold text-gray-900">What matters most to you?</Label>
                   <span className="text-sm text-gray-500">
-                    Total:{" "}
-                    {Math.round(
-                      (weights.experience + weights.reviews + weights.rating + weights.price + weights.speed) * 100,
-                    )}
-                    %
+                    Final: {Object.values(getNormalizedPercentages()).reduce((a, b) => a + b, 0)}%
                   </span>
+                </div>
+
+                {/* Quick Preset Buttons */}
+                <div className="mb-4 space-y-2">
+                  <Label className="text-sm text-gray-600">Quick presets:</Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyPreset("balanced")}
+                      className="text-xs"
+                    >
+                      🎯 Balanced
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyPreset("quality_focused")}
+                      className="text-xs"
+                    >
+                      ⭐ Quality First
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyPreset("budget_focused")}
+                      className="text-xs"
+                    >
+                      💰 Budget Focus
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyPreset("speed_focused")}
+                      className="text-xs"
+                    >
+                      ⚡ Speed Focus
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <Label className="text-gray-700">Experience</Label>
-                      <span className="text-sm text-gray-500">{Math.round(weights.experience * 100)}%</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-blue-600 font-medium">{rawWeights.experience}</span>
+                        <span className="text-xs text-gray-500">({getNormalizedPercentages().experience}%)</span>
+                      </div>
                     </div>
                     <Slider
-                      value={[weights.experience]}
-                      onValueChange={([value]) => updateWeights("experience", value)}
-                      max={1}
-                      step={0.05}
+                      value={[rawWeights.experience]}
+                      onValueChange={([value]) => updateRawWeight("experience", value)}
+                      max={100}
+                      step={1}
                       className="w-full [&_[role=slider]]:bg-blue-600 [&_[role=slider]]:border-blue-600 [&_.bg-primary]:bg-blue-600 [&_[role=slider]]:focus-visible:ring-blue-500"
                     />
                   </div>
@@ -461,13 +571,16 @@ export default function HomeRepairApp() {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <Label className="text-gray-700">Reviews</Label>
-                      <span className="text-sm text-gray-500">{Math.round(weights.reviews * 100)}%</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-blue-600 font-medium">{rawWeights.reviews}</span>
+                        <span className="text-xs text-gray-500">({getNormalizedPercentages().reviews}%)</span>
+                      </div>
                     </div>
                     <Slider
-                      value={[weights.reviews]}
-                      onValueChange={([value]) => updateWeights("reviews", value)}
-                      max={1}
-                      step={0.05}
+                      value={[rawWeights.reviews]}
+                      onValueChange={([value]) => updateRawWeight("reviews", value)}
+                      max={100}
+                      step={1}
                       className="w-full [&_[role=slider]]:bg-blue-600 [&_[role=slider]]:border-blue-600 [&_.bg-primary]:bg-blue-600 [&_[role=slider]]:focus-visible:ring-blue-500"
                     />
                   </div>
@@ -475,13 +588,16 @@ export default function HomeRepairApp() {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <Label className="text-gray-700">Rating</Label>
-                      <span className="text-sm text-gray-500">{Math.round(weights.rating * 100)}%</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-blue-600 font-medium">{rawWeights.rating}</span>
+                        <span className="text-xs text-gray-500">({getNormalizedPercentages().rating}%)</span>
+                      </div>
                     </div>
                     <Slider
-                      value={[weights.rating]}
-                      onValueChange={([value]) => updateWeights("rating", value)}
-                      max={1}
-                      step={0.05}
+                      value={[rawWeights.rating]}
+                      onValueChange={([value]) => updateRawWeight("rating", value)}
+                      max={100}
+                      step={1}
                       className="w-full [&_[role=slider]]:bg-blue-600 [&_[role=slider]]:border-blue-600 [&_.bg-primary]:bg-blue-600 [&_[role=slider]]:focus-visible:ring-blue-500"
                     />
                   </div>
@@ -489,13 +605,16 @@ export default function HomeRepairApp() {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <Label className="text-gray-700">Price</Label>
-                      <span className="text-sm text-gray-500">{Math.round(weights.price * 100)}%</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-blue-600 font-medium">{rawWeights.price}</span>
+                        <span className="text-xs text-gray-500">({getNormalizedPercentages().price}%)</span>
+                      </div>
                     </div>
                     <Slider
-                      value={[weights.price]}
-                      onValueChange={([value]) => updateWeights("price", value)}
-                      max={1}
-                      step={0.05}
+                      value={[rawWeights.price]}
+                      onValueChange={([value]) => updateRawWeight("price", value)}
+                      max={100}
+                      step={1}
                       className="w-full [&_[role=slider]]:bg-blue-600 [&_[role=slider]]:border-blue-600 [&_.bg-primary]:bg-blue-600 [&_[role=slider]]:focus-visible:ring-blue-500"
                     />
                   </div>
@@ -503,13 +622,16 @@ export default function HomeRepairApp() {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <Label className="text-gray-700">Speed</Label>
-                      <span className="text-sm text-gray-500">{Math.round(weights.speed * 100)}%</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-blue-600 font-medium">{rawWeights.speed}</span>
+                        <span className="text-xs text-gray-500">({getNormalizedPercentages().speed}%)</span>
+                      </div>
                     </div>
                     <Slider
-                      value={[weights.speed]}
-                      onValueChange={([value]) => updateWeights("speed", value)}
-                      max={1}
-                      step={0.05}
+                      value={[rawWeights.speed]}
+                      onValueChange={([value]) => updateRawWeight("speed", value)}
+                      max={100}
+                      step={1}
                       className="w-full [&_[role=slider]]:bg-blue-600 [&_[role=slider]]:border-blue-600 [&_.bg-primary]:bg-blue-600 [&_[role=slider]]:focus-visible:ring-blue-500"
                     />
                   </div>
@@ -555,9 +677,10 @@ export default function HomeRepairApp() {
             return (
             <Card
               key={apiContractor.id}
-              className="bg-white shadow-sm hover:shadow-md transition-shadow border border-gray-200 flex flex-col h-full"
+              className="bg-white shadow-sm hover:shadow-md transition-shadow border border-gray-200 flex flex-col"
+              style={{ minHeight: '600px' }}
             >
-              <CardContent className="p-4 sm:p-6 flex flex-col h-full">
+              <CardContent className="p-4 sm:p-6 flex flex-col h-full justify-between">
                 <div className="flex-grow">
                   <div className="flex items-start gap-4 mb-4">
                     <div className="relative flex-shrink-0">
@@ -579,7 +702,9 @@ export default function HomeRepairApp() {
                     </div>
                   </div>
 
-                  <p className="text-gray-600 text-sm mb-4 leading-relaxed">{contractor.description}</p>
+                  <div className="min-h-[60px] mb-4">
+                    <p className="text-gray-600 text-sm leading-relaxed line-clamp-3">{contractor.description}</p>
+                  </div>
 
                   <div className="mb-4">
                     <div className="flex items-center justify-between mb-2">
@@ -609,7 +734,7 @@ export default function HomeRepairApp() {
 
                   <div className="mb-4">
                     <h4 className="font-semibold text-gray-900 mb-2">Services</h4>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 min-h-[32px]">
                       {contractor.services.slice(0, 2).map((service, idx) => (
                         <Badge
                           key={idx}
@@ -622,13 +747,17 @@ export default function HomeRepairApp() {
                     </div>
                   </div>
 
-                  <div className="mb-6">
+                  <div className="mb-4">
                     <h4 className="font-semibold text-gray-900 mb-2">AI Summary</h4>
-                    <p className="text-gray-600 text-sm leading-relaxed">{contractor.aiSummary}</p>
+                    <div className="min-h-[80px]">
+                      <p className="text-gray-600 text-sm leading-relaxed line-clamp-4">{contractor.aiSummary}</p>
+                    </div>
                   </div>
                 </div>
 
-                <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white mt-auto">View profile</Button>
+                <div className="mt-auto pt-4">
+                  <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white">View profile</Button>
+                </div>
               </CardContent>
             </Card>
           )
