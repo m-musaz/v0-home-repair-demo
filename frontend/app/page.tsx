@@ -35,6 +35,19 @@ interface Contractor {
   services: string[]
   aiSummary: string
   profileImage?: string
+  description: string
+}
+
+// API Response interfaces
+interface ApiContractor {
+  id: string
+  name: string
+  score: number
+  reasoning?: string
+}
+
+interface ApiResponse {
+  top_contractors: ApiContractor[]
 }
 
 const mockContractors: Contractor[] = [
@@ -103,6 +116,8 @@ export default function HomeRepairApp() {
   const [projectType, setProjectType] = useState("")
   const [notes, setNotes] = useState("")
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [apiContractors, setApiContractors] = useState<ApiContractor[]>([])
+  const [error, setError] = useState<string>("")
   const [weights, setWeights] = useState<ProjectWeights>({
     experience: 0.4,
     reviews: 0.25,
@@ -111,12 +126,37 @@ export default function HomeRepairApp() {
     speed: 0.05,
   })
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (city && projectType) {
       setCurrentScreen("loading")
-      setTimeout(() => {
+      setError("")
+      
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/score`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            city,
+            project_type: projectType,
+            notes,
+            weights,
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.status} ${response.statusText}`)
+        }
+
+        const data: ApiResponse = await response.json()
+        setApiContractors(data.top_contractors)
         setCurrentScreen("results")
-      }, 10000) // 10 seconds delay
+      } catch (err) {
+        console.error("API Error:", err)
+        setError(err instanceof Error ? err.message : "Failed to fetch contractors")
+        setCurrentScreen("search")
+      }
     }
   }
 
@@ -132,6 +172,27 @@ export default function HomeRepairApp() {
   const getPricingDisplay = (band: string) => {
     const symbols = { $: "$", $$: "$$", $$$: "$$$" }
     return symbols[band as keyof typeof symbols] || band
+  }
+
+  // Map API contractor data to display format
+  const getContractorDetails = (apiContractor: ApiContractor): Contractor => {
+    // Map the API contractor to the hardcoded data based on name or ID
+    const contractorMap: { [key: string]: Contractor } = {
+      "c1": mockContractors[0], // NorthPeak Roofing -> Sarah Johnson
+      "c2": mockContractors[1], // Beehive Home Repair -> James Mark  
+      "c3": mockContractors[2], // Wasatch Elite Exteriors -> Vicks Johnny
+      "c4": mockContractors[1], // Granite Peak Roofing -> James Mark
+      "c5": mockContractors[0], // QuickFix Pros -> Sarah Johnson
+    }
+
+    const baseContractor = contractorMap[apiContractor.id] || mockContractors[0]
+    
+    return {
+      ...baseContractor,
+      name: apiContractor.name,
+      trustScore: Math.round(apiContractor.score), // Use API score as trust score
+      aiSummary: apiContractor.reasoning || baseContractor.aiSummary,
+    }
   }
 
   const updateWeights = (key: keyof ProjectWeights, newValue: number) => {
@@ -329,6 +390,11 @@ export default function HomeRepairApp() {
                   onChange={(e) => setCity(e.target.value)}
                   className="border-gray-300 focus:border-blue-500 focus:ring-blue-500 focus-visible:ring-blue-500 focus-visible:border-blue-500"
                 />
+                {error && (
+                  <div className="mt-2 text-sm text-red-600 bg-red-50 p-3 rounded">
+                    {error}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -484,9 +550,11 @@ export default function HomeRepairApp() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {mockContractors.map((contractor, index) => (
+          {apiContractors.length > 0 ? apiContractors.map((apiContractor, index) => {
+            const contractor = getContractorDetails(apiContractor)
+            return (
             <Card
-              key={index}
+              key={apiContractor.id}
               className="bg-white shadow-sm hover:shadow-md transition-shadow border border-gray-200 flex flex-col h-full"
             >
               <CardContent className="p-4 sm:p-6 flex flex-col h-full">
@@ -563,7 +631,12 @@ export default function HomeRepairApp() {
                 <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white mt-auto">View profile</Button>
               </CardContent>
             </Card>
-          ))}
+          )
+          }) : (
+            <div className="col-span-full text-center py-8">
+              <p className="text-gray-500">No contractors found. Please try a different search.</p>
+            </div>
+          )}
         </div>
 
         <div className="mt-8 text-center">
