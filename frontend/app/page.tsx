@@ -678,11 +678,12 @@ export default function HomeRepairApp() {
             <Card
               key={apiContractor.id}
               className="bg-white shadow-sm hover:shadow-md transition-shadow border border-gray-200 flex flex-col"
-              style={{ minHeight: '600px' }}
+                              style={{ minHeight: '700px' }}
             >
               <CardContent className="p-4 sm:p-6 flex flex-col h-full justify-between">
                 <div className="flex-grow">
-                  <div className="flex items-start gap-4 mb-4">
+                  {/* Header Section - Fixed Height */}
+                  <div className="flex items-start gap-4 mb-4" style={{ height: '80px' }}>
                     <div className="relative flex-shrink-0">
                       <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
                         <User className="w-8 h-8 text-gray-400" />
@@ -691,7 +692,7 @@ export default function HomeRepairApp() {
                         <span className="text-white text-xs font-bold">✓</span>
                       </div>
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
                       <h3 className="font-bold text-lg text-gray-900 truncate">{contractor.name}</h3>
                       <p className="text-gray-600 text-sm">{contractor.title}</p>
                       {index === 0 && (
@@ -702,44 +703,116 @@ export default function HomeRepairApp() {
                     </div>
                   </div>
 
-                  <div className="min-h-[60px] mb-4">
-                    <p className="text-gray-600 text-sm leading-relaxed line-clamp-3">{contractor.description}</p>
+                                                       {/* Summary Description - Fixed Height */}
+                  <div className="mb-4" style={{ height: '44px' }}>
+                    <p className="text-gray-600 text-sm leading-relaxed line-clamp-2 h-full flex items-center">
+                      {apiContractor.vertical.charAt(0).toUpperCase() + apiContractor.vertical.slice(1)} specialist serving {apiContractor.service_area}
+                    </p>
                   </div>
 
-                  <div className="mb-4">
+                                                       {/* Final Score Section - Fixed Height */}
+                  <div className="mb-4" style={{ height: '48px' }}>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold text-gray-900">Trust Score:</span>
-                      <span className="font-bold text-blue-600">{contractor.trustScore}%</span>
+                      <span className="font-semibold text-gray-900">Final Score:</span>
+                      <span className="font-bold text-blue-600">{apiContractor.score}/100</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full" 
+                        style={{ width: `${Math.min(apiContractor.score, 100)}%` }}
+                      ></div>
                     </div>
                   </div>
 
-                  <div className="space-y-3 mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1">
+                                                       {/* Contractor Details Grid - Fixed Height */}
+                  <div className="grid grid-cols-2 gap-3 mb-4 text-sm" style={{ height: '100px' }}>
+                    <div className="space-y-1 flex flex-col justify-between">
+                      <div className="flex items-center gap-2">
                         <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                        <span className="font-semibold">({contractor.rating})</span>
+                        <span className="font-semibold">{apiContractor.rating}</span>
+                        <span className="text-gray-500">({apiContractor.review_count})</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <MapPin className="w-4 h-4" />
+                        <span className="truncate">{apiContractor.service_area}</span>
+                      </div>
+                      
+                      <div className="text-gray-600">
+                        <span className="font-medium">Experience:</span> {apiContractor.years_in_business}y
+                      </div>
+                      
+                      <div className="text-gray-600">
+                        <span className="font-medium">Speed:</span> {apiContractor.speed_weeks}w
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Star className="w-4 h-4" />
-                      <span className="text-sm">{contractor.review_count} Reviews</span>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <MapPin className="w-4 h-4" />
-                      <span className="text-sm">{contractor.distance}</span>
+                    
+                    <div className="space-y-1 flex flex-col justify-between">
+                      <div className="text-gray-600">
+                        <span className="font-medium">Type:</span> <span className="capitalize">{apiContractor.vertical}</span>
+                      </div>
+                      
+                      <div className="text-gray-600">
+                        <span className="font-medium">Pricing:</span> {apiContractor.pricing_band || 'N/A'}
+                      </div>
+                      
+                      <div className="text-gray-600">
+                        <span className="font-medium">ID:</span> {apiContractor.id}
+                      </div>
+                      
+                      <div></div> {/* Spacer for alignment */}
                     </div>
                   </div>
 
-                  <div className="mb-4">
-                    <h4 className="font-semibold text-gray-900 mb-2">Services</h4>
-                    <div className="flex flex-wrap gap-2 min-h-[32px]">
+                                                       {/* Licenses Section - Fixed Height */}
+                  <div className="mb-4" style={{ height: '60px' }}>
+                    <h4 className="font-semibold text-gray-900 mb-2 text-sm">Licenses</h4>
+                    <div className="flex flex-wrap gap-1 h-8 overflow-hidden">
+                      {apiContractor.licenses && apiContractor.licenses.length > 0 ? (
+                        apiContractor.licenses.map((license, idx) => (
+                          <Badge
+                            key={idx}
+                            variant="secondary"
+                            className="text-xs bg-green-50 text-green-700 border-green-200 h-6"
+                          >
+                            {license}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-gray-500 text-xs flex items-center">No licenses listed</span>
+                      )}
+                    </div>
+                  </div>
+
+                                     {/* Flags Section - Fixed Height (Always Present) */}
+                  <div className="mb-4" style={{ height: '60px' }}>
+                    <h4 className="font-semibold text-gray-900 mb-2 text-sm">Flags</h4>
+                    <div className="flex flex-wrap gap-1 h-8 overflow-hidden">
+                      {apiContractor.flags && apiContractor.flags.length > 0 ? (
+                        apiContractor.flags.map((flag, idx) => (
+                          <Badge
+                            key={idx}
+                            variant="secondary"
+                            className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200 h-6"
+                          >
+                            {flag.replace(/_/g, ' ')}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-gray-500 text-xs flex items-center">No flags</span>
+                      )}
+                    </div>
+                  </div>
+
+                                     {/* Services Section - Fixed Height */}
+                  <div className="mb-4" style={{ height: '60px' }}>
+                    <h4 className="font-semibold text-gray-900 mb-2 text-sm">Services</h4>
+                    <div className="flex flex-wrap gap-1 h-8 overflow-hidden">
                       {contractor.services.slice(0, 2).map((service, idx) => (
                         <Badge
                           key={idx}
                           variant="secondary"
-                          className="text-xs bg-blue-50 text-blue-700 border-blue-200"
+                          className="text-xs bg-blue-50 text-blue-700 border-blue-200 h-6"
                         >
                           {service}
                         </Badge>
@@ -747,16 +820,20 @@ export default function HomeRepairApp() {
                     </div>
                   </div>
 
-                  <div className="mb-4">
-                    <h4 className="font-semibold text-gray-900 mb-2">AI Summary</h4>
-                    <div className="min-h-[80px]">
-                      <p className="text-gray-600 text-sm leading-relaxed line-clamp-4">{contractor.aiSummary}</p>
+                                                       {/* GPT Analysis Section - Fixed Height */}
+                  <div className="mb-4" style={{ height: '100px' }}>
+                    <h4 className="font-semibold text-gray-900 mb-2 text-sm">GPT Analysis</h4>
+                    <div className="h-20">
+                      <p className="text-gray-600 text-sm leading-relaxed line-clamp-4">
+                        {apiContractor.reasoning || "AI analysis not available"}
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-auto pt-4">
-                  <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white">View profile</Button>
+                {/* Button Section - Fixed Height at Bottom */}
+                <div className="mt-auto pt-4" style={{ height: '56px' }}>
+                  <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white h-10">View profile</Button>
                 </div>
               </CardContent>
             </Card>
